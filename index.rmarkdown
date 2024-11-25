@@ -1,0 +1,1288 @@
+---
+title: "index"
+author: "Paulina y Laura"
+format: html
+theme: cosmo
+toc: true
+---
+
+
+## Carga de paquetes
+
+```{r}
+#| label: carga_paquetes
+#| warning: false
+#| message: false
+
+# Cargar tmap
+library(tmap)
+
+# Colección de paquetes de Tidyverse
+library(tidyverse)
+
+# Estilos para ggplot2
+library(ggthemes)
+
+# Paletas de colores de RColorBrewer
+library(RColorBrewer)
+
+# Paletas de colores de viridis
+library(viridisLite)
+
+# Gráficos interactivos
+library(plotly)
+
+# Manejo de datos vectoriales
+library(sf)
+
+# Manejo de datos raster
+library(terra)
+
+# Manejo de datos raster
+library(raster)
+
+# Mapas interactivos
+library(leaflet)
+
+# Acceso a datos en GBIF
+library(rgbif)
+
+# Datos geoespaciales
+library(geodata)
+
+# Modelado de distribución de especies
+library(dismo)
+
+# Manejo datos Maxent
+library(rJava)
+
+# Cargar la librería de widgets 
+library(htmlwidgets)
+```
+
+
+# Carga de puntos 
+
+
+```{r}
+#| label: carga-puntos
+
+# Cargar el archivo de aves ebird
+
+# Lectura de un archivo TXT con registros de presencia de aves en Costa Rica
+
+
+# Leer el archivo como tabla
+puntos <- read.delim(
+  "C:/Users/laura/OneDrive - Universidad de Costa Rica/Monitoreo_ambiental/Aves_Palo_Verde/Ebird/Ebird data Guanacaste/ebd_CR-G_200701_202412_unv_smp_relSep-2024/ebd_CR-G_200701_202412_unv_smp_relSep-2024.txt",
+  stringsAsFactors = FALSE
+)
+
+# Convertir a objeto espacial usando columnas de coordenadas
+puntos <- st_as_sf(
+  puntos,
+  coords = c("LONGITUDE", "LATITUDE"),  # Nombres exactos de las columnas
+  remove = FALSE, # conservar las columnas de las coordenadas
+  crs = 4326  # Sistema de referencia WGS84 (EPSG:4326)
+)
+
+
+# Cargar shape Guanacaste
+
+guanacaste <- st_read("C:/Users/laura/OneDrive - Universidad de Costa Rica/Monitoreo_ambiental/Monitoreo_Palo_Verde/Guanacaste/delimitshapes/guanacaste.shp",
+    quiet = TRUE)
+
+
+```
+
+```{r}
+#| label: seleccion-especies
+
+# Lista de nombres científicos que quieres seleccionar
+especies_deseadas <- c("Dendrocygna autumnalis", 
+                       "Spatula discors", 
+                       "Jabiru mycteria", 
+                       "Mycteria americana", 
+                       "Eudocimus albus")
+
+# Filtrar las filas correspondientes
+especies_seleccionadas <- puntos |> 
+  filter(SCIENTIFIC.NAME %in% especies_deseadas)
+```
+
+```{r}
+#| label: descargar-clima
+#| eval: false
+
+# Definir un directorio permanente para guardar los datos
+directorio_clima <- "C:/Users/laura/OneDrive - Universidad de Costa Rica/Monitoreo_ambiental/Aves_Palo_Verde/Modelos/climate/bios/" # Cambia esta ruta según tu sistema
+
+# Crear el directorio si no existe
+#if (!dir.exists(directorio_clima)) {
+#  dir.create(directorio_clima, recursive = TRUE)}
+
+# Descargar y guardar los datos en el directorio permanente
+#clima <- worldclim_global(var = 'bio', res = 0.5, path = directorio_clima)
+
+# Ver los nombres de las variables climáticas
+#names(clima)
+
+```
+
+```{r}
+#| label: cargar-clima
+
+# Definir el directorio de los datos climáticos
+directorio_clima <- "C:/Users/laura/OneDrive - Universidad de Costa Rica/Monitoreo_ambiental/Aves_Palo_Verde/Modelos/climate/bios/"
+
+
+# Listar los archivos .tif en el directorio
+archivos_clima <- list.files(directorio_clima, pattern = "\\.tif$", full.names = TRUE)
+
+# Cargar todos los archivos raster
+bios <- rast(archivos_clima)
+
+# Seleccionar las capas BIO1 y BIO12
+bios_seleccionados <- bios[[c(1, 12)]]
+
+# Asignar nombres claros a las capas
+names(bios_seleccionados) <- c("Temperatura", "Precipitación")
+
+# Verificar las capas seleccionadas
+bios_seleccionados
+
+
+```
+
+```{r}
+#| label: Cargar-promed-escenarios
+#| warning: false
+#| message: false
+
+# Rutas de los archivos de promedios ya generados
+promedios_2041_2060_ssp245 <- "C:/Users/laura/OneDrive - Universidad de Costa Rica/Monitoreo_ambiental/Aves_Palo_Verde/Modelos/2041-2060/promedios_capas_1_y_12_ssp245.tif"
+promedios_2041_2060_ssp585 <- "C:/Users/laura/OneDrive - Universidad de Costa Rica/Monitoreo_ambiental/Aves_Palo_Verde/Modelos/2041-2060/promedios_capas_1_y_12_ssp585.tif"
+promedios_2081_2100_ssp245 <- "C:/Users/laura/OneDrive - Universidad de Costa Rica/Monitoreo_ambiental/Aves_Palo_Verde/Modelos/2081-2100/promedios_capas_1_y_12_ssp245.tif"
+promedios_2081_2100_ssp585 <- "C:/Users/laura/OneDrive - Universidad de Costa Rica/Monitoreo_ambiental/Aves_Palo_Verde/Modelos/2081-2100/promedios_capas_1_y_12_ssp585.tif"
+
+# Cargar los rasters
+promedios_2041_2060 <- rast(c(promedios_2041_2060_ssp245, promedios_2041_2060_ssp585))
+promedios_2081_2100 <- rast(c(promedios_2081_2100_ssp245, promedios_2081_2100_ssp585))
+
+# Verificar
+print(promedios_2041_2060)
+print(promedios_2081_2100)
+
+```
+
+```{r}
+# Crear el conjunto de capas con terra
+clima1 <- c(promedios_2041_2060[[1]], promedios_2041_2060[[2]])
+clima2 <- c(promedios_2041_2060[[3]], promedios_2041_2060[[4]])
+clima3 <- c(promedios_2081_2100[[1]], promedios_2081_2100[[2]])
+clima4 <- c(promedios_2081_2100[[3]], promedios_2081_2100[[4]])
+
+# Asignar nombres
+names(clima1) <- c("Temperatura", "Precipitación")
+names(clima2) <- c("Temperatura", "Precipitación")
+names(clima3) <- c("Temperatura", "Precipitación")
+names(clima4) <- c("Temperatura", "Precipitación")
+```
+
+```{r}
+#| label: area-estudio
+#| 
+# Definir la extensión del área de estudio
+area_estudio <- ext(
+  min(especies_seleccionadas$LONGITUDE) - 5, 
+  max(especies_seleccionadas$LONGITUDE) + 5,
+  min(especies_seleccionadas$LATITUDE) - 5, 
+  max(especies_seleccionadas$LATITUDE) + 5
+)
+
+# Recortar las variables bioclimáticas al área de estudio
+clima <- crop(bios_seleccionados, area_estudio)
+clima1<- crop(clima1, area_estudio)
+clima2<- crop(clima2, area_estudio)
+clima3<- crop(clima3, area_estudio)
+clima4<- crop(clima4, area_estudio)
+
+```
+
+```{r}
+#| label: df-coords
+
+# Crear dataframe con columnas de longitud y latitud
+coordenadas_presencia <- data.frame(
+  decimalLongitude = especies_seleccionadas$LONGITUDE,
+  decimalLatitude = especies_seleccionadas$LATITUDE
+)
+
+# Eliminar coordenadas duplicadas
+coordenadas_presencia <- unique(coordenadas_presencia)
+```
+
+```{r}
+#| label: entrenamiento-maxent
+
+# Establecer una "semilla" para garantizar que la selección aleatoria sea reproducible
+set.seed(123)
+
+# Cantidad de registros de presencia
+n_presencia <- nrow(coordenadas_presencia)
+
+# Con sample(), se selecciona aleatoriamente una proporción (ej. 0.7) 
+# de los índices de los datos de presencia para el conjunto de entrenamiento
+indices_entrenamiento <- sample(
+  1:n_presencia, 
+  size = round(0.7 * n_presencia)
+)
+
+# Crear el subconjunto de entrenamiento utilizando los índices seleccionados
+entrenamiento <- coordenadas_presencia[indices_entrenamiento, ]
+
+# Crear el subconjunto de evaluación con los datos restantes
+evaluacion <- coordenadas_presencia[-indices_entrenamiento, ]
+```
+
+```{r}
+#| label: correr-modelo
+
+# Los datos de clima deben convertirse al formato que usa el paquete raster
+# debido a es este el que acepta el paquete dismo
+
+clima <- raster::stack(clima)
+
+# Ejecutar el modelo
+modelo_maxent <- maxent(x = clima, p = entrenamiento)
+
+# Aplicar el modelo entrenado a las variables climáticas 
+# para generar un mapa de idoneidad del hábitat
+prediccion <- predict(modelo_maxent, clima)
+```
+
+```{r}
+#| label: eval
+
+# terra::extract() extrae los valores del raster de predicción en las coordenadas de evaluación
+# eval_pres almacena los valores de idoneidad predichos en los puntos de evaluación de presencia
+eval_pres <- terra::extract(
+  prediccion, 
+  evaluacion[, c('decimalLongitude', 'decimalLatitude')]
+)
+
+# Generar puntos aleatorios dentro del área de estudio definida. 
+# Estos puntos se asumen como ausencias de la especie.
+ausencias <- randomPoints(mask = clima, n = 1000)
+
+# eval_aus almacena los valores de idoneidad predichos
+# en los puntos de ausencia
+eval_aus <- terra::extract(
+  prediccion, 
+  ausencias
+)
+
+# Generar estadísticas de evaluación del modelo
+resultado_evaluacion <- evaluate(p = eval_pres, a = eval_aus)
+```
+
+```{r}
+#| label: curva-roc
+# Datos para graficar la curva ROC
+datos_roc <- data.frame(
+  FPR = resultado_evaluacion@FPR,
+  TPR = resultado_evaluacion@TPR,
+  Umbral = resultado_evaluacion@t
+)
+
+# Valor AUC
+auc <- resultado_evaluacion@auc
+
+# Gráfico ggplot2
+grafico_ggplot2 <-
+  ggplot(
+    datos_roc, 
+    aes(
+      x = FPR, 
+      y = TPR,
+      u = Umbral
+    )
+  ) +
+  geom_line(
+    color = "blue", 
+    size = 1
+  ) +
+  geom_abline(slope = 1, intercept = 0, linetype = "dashed", color = "red") +
+  labs(title = paste("Curva ROC (AUC =", round(auc, 3), ")"),
+       x = "Tasa de falsos positivos (FPR)",
+       y = "Tasa de verdaderos positivos (TPR)") +
+  theme_minimal()
+
+# Gráfico plotly
+ggplotly(grafico_ggplot2) |> 
+  config(locale = 'es')
+```
+
+
+
+# Mapas historicos
+
+
+```{r}
+#| label: grafico_distribucion
+
+# Paleta de colores del modelo
+colores_modelo <- colorNumeric(
+  palette = c("white", "black"),
+  values(prediccion),
+  na.color = "transparent"
+)
+
+# Crear una paleta de colores categórica para las especies
+especies_unicas <- unique(especies_seleccionadas$SCIENTIFIC.NAME)
+paleta_especies <- colorFactor(
+  palette = brewer.pal(length(especies_unicas), "Set1"),
+  domain = especies_unicas
+)
+
+# Paleta de colores de temperatura con rango fijo de 0 a 35
+colores_temperatura <- colorNumeric(
+  palette = rev(brewer.pal(11, "RdYlBu")),  # Paleta de colores
+  domain = c(0, 35),  # Rango fijo de valores
+  na.color = "transparent"  # Color para valores NA
+)
+
+# Paleta de colores de precipitación
+colores_precipitacion <- colorNumeric(
+  # palette = "viridis",
+  # palette = "YlGnBu",  
+  palette = "Blues",
+  domain = c(0, 5500),
+  na.color = "transparent"
+)
+
+# Mapa
+
+leaflet() |>
+  addTiles(group = "Mapa general") |>
+  addProviderTiles(
+    providers$Esri.WorldImagery, 
+    group = "Imágenes satelitales"
+  ) |>  
+  addProviderTiles(
+    providers$CartoDB.Positron, 
+    group = "Mapa blanco"
+  ) |>
+  addRasterImage( # capa raster de temperatura
+    clima$Temperatura,
+    colors = colores_temperatura, # paleta de colores
+    opacity = 0.6,
+    group = "Temperatura",
+  ) |>
+  addRasterImage( # capa raster de precipitación
+    clima$Precipitación,
+    colors = colores_precipitacion, # paleta de colores
+    opacity = 0.6,
+    group = "Precipitación",
+  ) |>
+  addRasterImage( # capa raster del modelo de distribución
+    prediccion,
+    colors = colores_modelo,
+    opacity = 0.6,
+    group = "Modelo de distribución",
+  ) |>  
+  addCircleMarkers(
+    # capa de registros de presencia (puntos)
+    data = especies_seleccionadas,
+    stroke = F,
+    radius = 3,
+    fillColor = ~paleta_especies(SCIENTIFIC.NAME),  # Corregir el uso de la paleta
+    fillOpacity = 1,
+    popup = paste(
+      paste0("<strong>Nombre Científico: </strong>", especies_seleccionadas$SCIENTIFIC.NAME),
+      paste0("<strong>Cantidad de individuos: </strong>", especies_seleccionadas$OBSERVATION.COUNT),
+      paste0("<strong>Fecha de avistamiento: </strong>", especies_seleccionadas$OBSERVATION.DATE),
+      paste0("<a href='", especies_seleccionadas$GLOBAL.UNIQUE.IDENTIFIER, "'>Más información</a>"),
+      sep = '<br/>'
+    ),
+    group = "Registros de aves"
+    ) |>
+  addLegend(
+    title = "Temperatura",
+    values = values(clima$Temperatura),
+    pal = colores_temperatura,
+    position = "bottomleft",
+    group = "Temperatura") |>
+  addLegend(
+    title = "Precipitación",
+    values = values(clima$Precipitación),
+    pal = colores_precipitacion,
+    position = "bottomleft",
+    group = "Precipitación") |>
+  addLegend(
+    title = "Modelo de distribución",
+    values = values(prediccion),
+    pal = colores_modelo,
+    position = "bottomright",
+    group = "Modelo de distribución") |>
+  addLegend(
+    title = "Especies",
+    values = especies_seleccionadas$SCIENTIFIC.NAME,  # Pasa la columna correcta
+    pal = paleta_especies,
+    position = "bottomleft",
+    group = "Especies") |>
+  addLayersControl(
+    baseGroups = c("Mapa general", "Imágenes satelitales", "Mapa blanco"),
+    overlayGroups = c("Temperatura", "Precipitación", "Modelo de distribución", "Registros de aves")
+    ) |>
+  hideGroup("Temperatura") |>
+  hideGroup("Precipitación")
+
+
+# Guardar el mapa en un archivo HTML
+#htmlwidgets::saveWidget(
+#widget = mapa_final,
+#file="C:/Users/laura/OneDrive - Universidad de Costa Rica/Monitoreo_ambiental/Aves_Palo_Verde/Modelos/historico.html",
+#selfcontained = TRUE
+#)
+```
+
+```{r}
+#| label: mapa-binario
+
+# Definir el umbral
+umbral <- 0.4
+
+# Crear el raster binario
+prediccion_binaria <- (prediccion >= umbral) * 1
+
+# Crear la paleta de colores para el raster binario
+colores_prediccion_binaria <- colorFactor(
+  palette = c("transparent", "blue"),  # "transparent" para las áreas no adecuadas
+  domain = c(0, 1),
+  na.color = "transparent"
+)
+
+# Mapa
+leaflet() |>
+  addTiles(group = "Mapa general") |>
+  addProviderTiles(
+    providers$Esri.WorldImagery, 
+    group = "Imágenes satelitales"
+  ) |>
+  addProviderTiles(
+    providers$CartoDB.Positron, 
+    group = "Mapa blanco"
+  ) |>
+  addRasterImage(
+    prediccion_binaria,
+    colors = colores_prediccion_binaria,
+    opacity = 0.6,
+    group = "Modelo de distribución binario",
+  ) |>
+  addCircleMarkers(
+    # capa de registros de presencia (puntos)
+    data = especies_seleccionadas,
+    stroke = F,
+    radius = 3,
+    fillColor = ~paleta_especies(SCIENTIFIC.NAME),  # Corregir el uso de la paleta
+    fillOpacity = 1,
+    popup = paste(
+      paste0("<strong>Nombre Científico: </strong>", especies_seleccionadas$SCIENTIFIC.NAME),
+      paste0("<strong>Cantidad de individuos: </strong>", especies_seleccionadas$OBSERVATION.COUNT),
+      paste0("<strong>Fecha de avistamiento: </strong>", especies_seleccionadas$OBSERVATION.DATE),
+      paste0("<a href='", especies_seleccionadas$GLOBAL.UNIQUE.IDENTIFIER, "'>Más información</a>"),
+      sep = '<br/>'
+    ),
+    group = "Registros de aves"
+  ) |>
+  addLegend(
+    title = "Modelo de distribución binario",
+    labels = c("Ausencia", "Presencia"),
+    colors = c("transparent", "blue"),
+    position = "bottomright",
+    group = "Modelo de distribución binario"
+  ) |>
+  addLegend(
+    title = "Especies",
+    values = especies_seleccionadas$SCIENTIFIC.NAME,  # Pasa la columna correcta
+    pal = paleta_especies,
+    position = "bottomleft",
+    group = "Especies"
+  ) -> mapa_final
+
+# Añadir el control de capas después de haber creado el mapa
+mapa_final |>
+  addLayersControl(
+    baseGroups = c("Mapa general", "Imágenes satelitales", "Mapa blanco"),
+    overlayGroups = c("Modelo de distribución binario", "Registros de aves")
+    )
+
+
+# Guardar el mapa en un archivo HTML
+htmlwidgets::saveWidget(
+widget = mapa_final,
+file="C:/Users/laura/OneDrive - Universidad de Costa Rica/Monitoreo_ambiental/Aves_Palo_Verde/Modelos/bin_historico.html",
+selfcontained = TRUE
+)
+
+```
+
+
+#MAXENT para escenarios futuros
+
+
+```{r}
+#| label: maxent-fut1
+
+# Los datos de clima deben convertirse al formato que usa el paquete raster
+# debido a es este el que acepta el paquete dismo
+
+
+# Convertir a RasterStack para maxent
+clima1 <- raster::stack(clima1)
+
+# Ejecutar el modelo
+modelo_maxent <- maxent(x = clima1, p = coordenadas_presencia)
+
+# Aplicar el modelo entrenado
+prediccion1 <- predict(modelo_maxent, clima1)
+
+```
+
+```{r}
+#| label: maxent-fut2
+
+# Los datos de clima deben convertirse al formato que usa el paquete raster
+# debido a es este el que acepta el paquete dismo
+
+
+# Convertir a RasterStack para maxent
+clima2 <- raster::stack(clima2)
+
+# Ejecutar el modelo
+modelo_maxent <- maxent(x = clima2, p = coordenadas_presencia)
+
+# Aplicar el modelo entrenado
+prediccion2 <- predict(modelo_maxent, clima2)
+
+```
+
+```{r}
+#| label: maxent-fut3
+
+# Los datos de clima deben convertirse al formato que usa el paquete raster
+# debido a es este el que acepta el paquete dismo
+
+
+# Convertir a RasterStack para maxent
+clima3 <- raster::stack(clima3)
+
+# Ejecutar el modelo
+modelo_maxent <- maxent(x = clima3, p = coordenadas_presencia)
+
+# Aplicar el modelo entrenado
+prediccion3 <- predict(modelo_maxent, clima3)
+
+```
+
+```{r}
+#| label: maxent-fut4
+
+# Los datos de clima deben convertirse al formato que usa el paquete raster
+# debido a es este el que acepta el paquete dismo
+
+
+# Convertir a RasterStack para maxent
+clima4 <- raster::stack(clima4)
+
+# Ejecutar el modelo
+modelo_maxent <- maxent(x = clima4, p = coordenadas_presencia)
+
+# Aplicar el modelo entrenado
+prediccion4 <- predict(modelo_maxent, clima4)
+
+```
+
+
+
+# Mapas proyecciones
+
+
+```{r}
+#| label: grafico_distribucion1
+
+# Paleta de colores del modelo
+colores_modelo <- colorNumeric(
+  palette = c("white", "black"),
+  values(prediccion),
+  na.color = "transparent"
+)
+
+# Mapa
+leaflet() |>
+  addTiles(group = "Mapa general") |>
+  addProviderTiles(
+    providers$Esri.WorldImagery, 
+    group = "Imágenes satelitales"
+  ) |>  
+  addProviderTiles(
+    providers$CartoDB.Positron, 
+    group = "Mapa blanco"
+  ) |>
+  addRasterImage( # capa raster de temperatura
+    clima1$Temperatura,
+    colors = colores_temperatura, # paleta de colores
+    opacity = 0.6,
+    group = "Temperatura",
+  ) |>
+  addRasterImage( # capa raster de precipitación
+    clima1$Precipitación,
+    colors = colores_precipitacion, # paleta de colores
+    opacity = 0.6,
+    group = "Precipitación",
+  ) |>
+  addRasterImage( # capa raster del modelo de distribución
+    prediccion,
+    colors = colores_modelo,
+    opacity = 0.6,
+    group = "Modelo de distribución",
+  ) |>  
+  addCircleMarkers(
+    # capa de registros de presencia (puntos)
+    data = especies_seleccionadas,
+    stroke = F,
+    radius = 3,
+    fillColor = ~paleta_especies(SCIENTIFIC.NAME),  # Corregir el uso de la paleta
+    fillOpacity = 1,
+    popup = paste(
+      paste0("<strong>Nombre Científico: </strong>", especies_seleccionadas$SCIENTIFIC.NAME),
+      paste0("<strong>Cantidad de individuos: </strong>", especies_seleccionadas$OBSERVATION.COUNT),
+      paste0("<strong>Fecha de avistamiento: </strong>", especies_seleccionadas$OBSERVATION.DATE),
+      paste0("<a href='", especies_seleccionadas$GLOBAL.UNIQUE.IDENTIFIER, "'>Más información</a>"),
+      sep = '<br/>'
+    ),
+    group = "Registros de aves"
+    ) |>
+  addLegend(
+    title = "Temperatura",
+    values = values(clima1$Temperatura),
+    pal = colores_temperatura,
+    position = "bottomleft",
+    group = "Temperatura") |>
+  addLegend(
+    title = "Precipitación",
+    values = values(clima1$Precipitación),
+    pal = colores_precipitacion,
+    position = "bottomleft",
+    group = "Precipitación") |>
+  addLegend(
+    title = "Modelo de distribución",
+    values = values(prediccion1),
+    pal = colores_modelo,
+    position = "bottomright",
+    group = "Modelo de distribución") |>
+  addLegend(
+    title = "Especies",
+    values = especies_seleccionadas$SCIENTIFIC.NAME,  # Pasa la columna correcta
+    pal = paleta_especies,
+    position = "bottomleft",
+    group = "Especies"
+    ) -> mapa_final
+
+# Añadir el control de capas después de haber creado el mapa
+
+mapa_final |>
+  addLayersControl(
+    baseGroups = c("Mapa general", "Imágenes satelitales", "Mapa blanco"),
+    overlayGroups = c("Temperatura", "Precipitación", "Modelo de distribución", "Registros de aves")
+    ) |>
+  hideGroup("Temperatura") |>
+  hideGroup("Precipitación")
+
+
+```
+
+```{r}
+#| label: mapa-binario1
+
+# Definir el umbral
+umbral <- 0.4
+
+# Crear el raster binario
+prediccion_binaria <- (prediccion1 >= umbral) * 1
+
+# Crear la paleta de colores para el raster binario
+colores_prediccion_binaria <- colorFactor(
+  palette = c("transparent", "blue"),  # "transparent" para las áreas no adecuadas
+  domain = c(0, 1),
+  na.color = "transparent"
+)
+
+# Mapa
+leaflet() |>
+  addTiles(group = "Mapa general") |>
+  addProviderTiles(
+    providers$Esri.WorldImagery, 
+    group = "Imágenes satelitales"
+  ) |>
+  addProviderTiles(
+    providers$CartoDB.Positron, 
+    group = "Mapa blanco"
+  ) |>
+  addRasterImage(
+    prediccion_binaria,
+    colors = colores_prediccion_binaria,
+    opacity = 0.6,
+    group = "Modelo de distribución binario",
+  ) |>
+  addCircleMarkers(
+    # capa de registros de presencia (puntos)
+    data = especies_seleccionadas,
+    stroke = F,
+    radius = 3,
+    fillColor = ~paleta_especies(SCIENTIFIC.NAME),  # Corregir el uso de la paleta
+    fillOpacity = 1,
+    popup = paste(
+      paste0("<strong>Nombre Científico: </strong>", especies_seleccionadas$SCIENTIFIC.NAME),
+      paste0("<strong>Cantidad de individuos: </strong>", especies_seleccionadas$OBSERVATION.COUNT),
+      paste0("<strong>Fecha de avistamiento: </strong>", especies_seleccionadas$OBSERVATION.DATE),
+      paste0("<a href='", especies_seleccionadas$GLOBAL.UNIQUE.IDENTIFIER, "'>Más información</a>"),
+      sep = '<br/>'
+    ),
+    group = "Registros de aves"
+  ) |>
+  addLegend(
+    title = "Modelo de distribución binario",
+    labels = c("Ausencia", "Presencia"),
+    colors = c("transparent", "blue"),
+    position = "bottomright",
+    group = "Modelo de distribución binario"
+  ) |>
+  addLegend(
+    title = "Especies",
+    values = especies_seleccionadas$SCIENTIFIC.NAME,  # Pasa la columna correcta
+    pal = paleta_especies,
+    position = "bottomleft",
+    group = "Especies"
+  ) -> mapa_final
+
+# Añadir el control de capas después de haber creado el mapa
+mapa_final |>
+  addLayersControl(
+    baseGroups = c("Mapa general", "Imágenes satelitales", "Mapa blanco"),
+    overlayGroups = c("Modelo de distribución binario", "Registros de aves")
+    )
+
+
+# Guardar el mapa en un archivo HTML
+htmlwidgets::saveWidget(
+widget = mapa_final,
+file="C:/Users/laura/OneDrive - Universidad de Costa Rica/Monitoreo_ambiental/Aves_Palo_Verde/Modelos/bin_historico.html",
+selfcontained = TRUE
+)
+```
+
+```{r}
+#| label: grafico_distribucion2
+
+# Paleta de colores del modelo
+colores_modelo <- colorNumeric(
+  palette = c("white", "black"),
+  values(prediccion),
+  na.color = "transparent"
+)
+
+# Mapa
+leaflet() |>
+  addTiles(group = "Mapa general") |>
+  addProviderTiles(
+    providers$Esri.WorldImagery, 
+    group = "Imágenes satelitales"
+  ) |>  
+  addProviderTiles(
+    providers$CartoDB.Positron, 
+    group = "Mapa blanco"
+  ) |>
+  addRasterImage( # capa raster de temperatura
+    clima2$Temperatura,
+    colors = colores_temperatura, # paleta de colores
+    opacity = 0.6,
+    group = "Temperatura",
+  ) |>
+  addRasterImage( # capa raster de precipitación
+    clima2$Precipitación,
+    colors = colores_precipitacion, # paleta de colores
+    opacity = 0.6,
+    group = "Precipitación",
+  ) |>
+  addRasterImage( # capa raster del modelo de distribución
+    prediccion,
+    colors = colores_modelo,
+    opacity = 0.6,
+    group = "Modelo de distribución",
+  ) |>  
+  addCircleMarkers(
+    # capa de registros de presencia (puntos)
+    data = especies_seleccionadas,
+    stroke = F,
+    radius = 3,
+    fillColor = ~paleta_especies(SCIENTIFIC.NAME),  # Corregir el uso de la paleta
+    fillOpacity = 1,
+    popup = paste(
+      paste0("<strong>Nombre Científico: </strong>", especies_seleccionadas$SCIENTIFIC.NAME),
+      paste0("<strong>Cantidad de individuos: </strong>", especies_seleccionadas$OBSERVATION.COUNT),
+      paste0("<strong>Fecha de avistamiento: </strong>", especies_seleccionadas$OBSERVATION.DATE),
+      paste0("<a href='", especies_seleccionadas$GLOBAL.UNIQUE.IDENTIFIER, "'>Más información</a>"),
+      sep = '<br/>'
+    ),
+    group = "Registros de aves"
+    ) |>
+  addLegend(
+    title = "Temperatura",
+    values = values(clima2$Temperatura),
+    pal = colores_temperatura,
+    position = "bottomleft",
+    group = "Temperatura") |>
+  addLegend(
+    title = "Precipitación",
+    values = values(clima2$Precipitación),
+    pal = colores_precipitacion,
+    position = "bottomleft",
+    group = "Precipitación") |>
+  addLegend(
+    title = "Modelo de distribución",
+    values = values(prediccion2),
+    pal = colores_modelo,
+    position = "bottomright",
+    group = "Modelo de distribución") |>
+  addLegend(
+    title = "Especies",
+    values = especies_seleccionadas$SCIENTIFIC.NAME,  # Pasa la columna correcta
+    pal = paleta_especies,
+    position = "bottomleft",
+    group = "Especies"
+    ) -> mapa_final
+
+# Añadir el control de capas después de haber creado el mapa
+
+mapa_final |>
+  addLayersControl(
+    baseGroups = c("Mapa general", "Imágenes satelitales", "Mapa blanco"),
+    overlayGroups = c("Temperatura", "Precipitación", "Modelo de distribución", "Registros de aves")
+    ) |>
+  hideGroup("Temperatura") |>
+  hideGroup("Precipitación")
+
+
+```
+
+```{r}
+#| label: mapa-binario2
+
+# Definir el umbral
+umbral <- 0.4
+
+# Crear el raster binario
+prediccion_binaria <- (prediccion2 >= umbral) * 1
+
+# Crear la paleta de colores para el raster binario
+colores_prediccion_binaria <- colorFactor(
+  palette = c("transparent", "blue"),  # "transparent" para las áreas no adecuadas
+  domain = c(0, 1),
+  na.color = "transparent"
+)
+
+# Mapa
+leaflet() |>
+  addTiles(group = "Mapa general") |>
+  addProviderTiles(
+    providers$Esri.WorldImagery, 
+    group = "Imágenes satelitales"
+  ) |>
+  addProviderTiles(
+    providers$CartoDB.Positron, 
+    group = "Mapa blanco"
+  ) |>
+  addRasterImage(
+    prediccion_binaria,
+    colors = colores_prediccion_binaria,
+    opacity = 0.6,
+    group = "Modelo de distribución binario",
+  ) |>
+  addCircleMarkers(
+    # capa de registros de presencia (puntos)
+    data = especies_seleccionadas,
+    stroke = F,
+    radius = 3,
+    fillColor = ~paleta_especies(SCIENTIFIC.NAME),  # Corregir el uso de la paleta
+    fillOpacity = 1,
+    popup = paste(
+      paste0("<strong>Nombre Científico: </strong>", especies_seleccionadas$SCIENTIFIC.NAME),
+      paste0("<strong>Cantidad de individuos: </strong>", especies_seleccionadas$OBSERVATION.COUNT),
+      paste0("<strong>Fecha de avistamiento: </strong>", especies_seleccionadas$OBSERVATION.DATE),
+      paste0("<a href='", especies_seleccionadas$GLOBAL.UNIQUE.IDENTIFIER, "'>Más información</a>"),
+      sep = '<br/>'
+    ),
+    group = "Registros de aves"
+  ) |>
+  addLegend(
+    title = "Modelo de distribución binario",
+    labels = c("Ausencia", "Presencia"),
+    colors = c("transparent", "blue"),
+    position = "bottomright",
+    group = "Modelo de distribución binario"
+  ) |>
+  addLegend(
+    title = "Especies",
+    values = especies_seleccionadas$SCIENTIFIC.NAME,  # Pasa la columna correcta
+    pal = paleta_especies,
+    position = "bottomleft",
+    group = "Especies"
+  ) -> mapa_final
+
+# Añadir el control de capas después de haber creado el mapa
+mapa_final |>
+  addLayersControl(
+    baseGroups = c("Mapa general", "Imágenes satelitales", "Mapa blanco"),
+    overlayGroups = c("Modelo de distribución binario", "Registros de aves")
+    )
+
+
+```
+
+```{r}
+#| label: grafico_distribucion3
+
+# Paleta de colores del modelo
+colores_modelo <- colorNumeric(
+  palette = c("white", "black"),
+  values(prediccion),
+  na.color = "transparent"
+)
+
+# Mapa
+leaflet() |>
+  addTiles(group = "Mapa general") |>
+  addProviderTiles(
+    providers$Esri.WorldImagery, 
+    group = "Imágenes satelitales"
+  ) |>  
+  addProviderTiles(
+    providers$CartoDB.Positron, 
+    group = "Mapa blanco"
+  ) |>
+  addRasterImage( # capa raster de temperatura
+    clima3$Temperatura,
+    colors = colores_temperatura, # paleta de colores
+    opacity = 0.6,
+    group = "Temperatura",
+  ) |>
+  addRasterImage( # capa raster de precipitación
+    clima3$Precipitación,
+    colors = colores_precipitacion, # paleta de colores
+    opacity = 0.6,
+    group = "Precipitación",
+  ) |>
+  addRasterImage( # capa raster del modelo de distribución
+    prediccion,
+    colors = colores_modelo,
+    opacity = 0.6,
+    group = "Modelo de distribución",
+  ) |>  
+  addCircleMarkers(
+    # capa de registros de presencia (puntos)
+    data = especies_seleccionadas,
+    stroke = F,
+    radius = 3,
+    fillColor = ~paleta_especies(SCIENTIFIC.NAME),  # Corregir el uso de la paleta
+    fillOpacity = 1,
+    popup = paste(
+      paste0("<strong>Nombre Científico: </strong>", especies_seleccionadas$SCIENTIFIC.NAME),
+      paste0("<strong>Cantidad de individuos: </strong>", especies_seleccionadas$OBSERVATION.COUNT),
+      paste0("<strong>Fecha de avistamiento: </strong>", especies_seleccionadas$OBSERVATION.DATE),
+      paste0("<a href='", especies_seleccionadas$GLOBAL.UNIQUE.IDENTIFIER, "'>Más información</a>"),
+      sep = '<br/>'
+    ),
+    group = "Registros de aves"
+    ) |>
+  addLegend(
+    title = "Temperatura",
+    values = values(clima3$Temperatura),
+    pal = colores_temperatura,
+    position = "bottomleft",
+    group = "Temperatura") |>
+  addLegend(
+    title = "Precipitación",
+    values = values(clima3$Precipitación),
+    pal = colores_precipitacion,
+    position = "bottomleft",
+    group = "Precipitación") |>
+  addLegend(
+    title = "Modelo de distribución",
+    values = values(prediccion2),
+    pal = colores_modelo,
+    position = "bottomright",
+    group = "Modelo de distribución") |>
+  addLegend(
+    title = "Especies",
+    values = especies_seleccionadas$SCIENTIFIC.NAME,  # Pasa la columna correcta
+    pal = paleta_especies,
+    position = "bottomleft",
+    group = "Especies"
+    ) -> mapa_final
+
+# Añadir el control de capas después de haber creado el mapa
+
+mapa_final |>
+  addLayersControl(
+    baseGroups = c("Mapa general", "Imágenes satelitales", "Mapa blanco"),
+    overlayGroups = c("Temperatura", "Precipitación", "Modelo de distribución", "Registros de aves")
+    ) |>
+  hideGroup("Temperatura") |>
+  hideGroup("Precipitación")
+
+
+```
+
+```{r}
+#| label: mapa-binario3
+
+# Definir el umbral
+umbral <- 0.4
+
+# Crear el raster binario
+prediccion_binaria <- (prediccion3 >= umbral) * 1
+
+# Crear la paleta de colores para el raster binario
+colores_prediccion_binaria <- colorFactor(
+  palette = c("transparent", "blue"),  # "transparent" para las áreas no adecuadas
+  domain = c(0, 1),
+  na.color = "transparent"
+)
+
+# Mapa
+leaflet() |>
+  addTiles(group = "Mapa general") |>
+  addProviderTiles(
+    providers$Esri.WorldImagery, 
+    group = "Imágenes satelitales"
+  ) |>
+  addProviderTiles(
+    providers$CartoDB.Positron, 
+    group = "Mapa blanco"
+  ) |>
+  addRasterImage(
+    prediccion_binaria,
+    colors = colores_prediccion_binaria,
+    opacity = 0.6,
+    group = "Modelo de distribución binario",
+  ) |>
+  addCircleMarkers(
+    # capa de registros de presencia (puntos)
+    data = especies_seleccionadas,
+    stroke = F,
+    radius = 3,
+    fillColor = ~paleta_especies(SCIENTIFIC.NAME),  # Corregir el uso de la paleta
+    fillOpacity = 1,
+    popup = paste(
+      paste0("<strong>Nombre Científico: </strong>", especies_seleccionadas$SCIENTIFIC.NAME),
+      paste0("<strong>Cantidad de individuos: </strong>", especies_seleccionadas$OBSERVATION.COUNT),
+      paste0("<strong>Fecha de avistamiento: </strong>", especies_seleccionadas$OBSERVATION.DATE),
+      paste0("<a href='", especies_seleccionadas$GLOBAL.UNIQUE.IDENTIFIER, "'>Más información</a>"),
+      sep = '<br/>'
+    ),
+    group = "Registros de aves"
+  ) |>
+  addLegend(
+    title = "Modelo de distribución binario",
+    labels = c("Ausencia", "Presencia"),
+    colors = c("transparent", "blue"),
+    position = "bottomright",
+    group = "Modelo de distribución binario"
+  ) |>
+  addLegend(
+    title = "Especies",
+    values = especies_seleccionadas$SCIENTIFIC.NAME,  # Pasa la columna correcta
+    pal = paleta_especies,
+    position = "bottomleft",
+    group = "Especies"
+  ) -> mapa_final
+
+# Añadir el control de capas después de haber creado el mapa
+mapa_final |>
+  addLayersControl(
+    baseGroups = c("Mapa general", "Imágenes satelitales", "Mapa blanco"),
+    overlayGroups = c("Modelo de distribución binario", "Registros de aves")
+    )
+
+
+```
+
+```{r}
+#| label: grafico_distribucion4
+
+# Paleta de colores del modelo
+colores_modelo <- colorNumeric(
+  palette = c("white", "black"),
+  values(prediccion),
+  na.color = "transparent"
+)
+
+# Mapa
+leaflet() |>
+  addTiles(group = "Mapa general") |>
+  addProviderTiles(
+    providers$Esri.WorldImagery, 
+    group = "Imágenes satelitales"
+  ) |>  
+  addProviderTiles(
+    providers$CartoDB.Positron, 
+    group = "Mapa blanco"
+  ) |>
+  addRasterImage( # capa raster de temperatura
+    clima4$Temperatura,
+    colors = colores_temperatura, # paleta de colores
+    opacity = 0.6,
+    group = "Temperatura",
+  ) |>
+  addRasterImage( # capa raster de precipitación
+    clima4$Precipitación,
+    colors = colores_precipitacion, # paleta de colores
+    opacity = 0.6,
+    group = "Precipitación",
+  ) |>
+  addRasterImage( # capa raster del modelo de distribución
+    prediccion,
+    colors = colores_modelo,
+    opacity = 0.6,
+    group = "Modelo de distribución",
+  ) |>  
+  addCircleMarkers(
+    # capa de registros de presencia (puntos)
+    data = especies_seleccionadas,
+    stroke = F,
+    radius = 3,
+    fillColor = ~paleta_especies(SCIENTIFIC.NAME),  # Corregir el uso de la paleta
+    fillOpacity = 1,
+    popup = paste(
+      paste0("<strong>Nombre Científico: </strong>", especies_seleccionadas$SCIENTIFIC.NAME),
+      paste0("<strong>Cantidad de individuos: </strong>", especies_seleccionadas$OBSERVATION.COUNT),
+      paste0("<strong>Fecha de avistamiento: </strong>", especies_seleccionadas$OBSERVATION.DATE),
+      paste0("<a href='", especies_seleccionadas$GLOBAL.UNIQUE.IDENTIFIER, "'>Más información</a>"),
+      sep = '<br/>'
+    ),
+    group = "Registros de aves"
+    ) |>
+  addLegend(
+    title = "Temperatura",
+    values = values(clima4$Temperatura),
+    pal = colores_temperatura,
+    position = "bottomleft",
+    group = "Temperatura") |>
+  addLegend(
+    title = "Precipitación",
+    values = values(clima4$Precipitación),
+    pal = colores_precipitacion,
+    position = "bottomleft",
+    group = "Precipitación") |>
+  addLegend(
+    title = "Modelo de distribución",
+    values = values(prediccion4),
+    pal = colores_modelo,
+    position = "bottomright",
+    group = "Modelo de distribución") |>
+  addLegend(
+    title = "Especies",
+    values = especies_seleccionadas$SCIENTIFIC.NAME,  # Pasa la columna correcta
+    pal = paleta_especies,
+    position = "bottomleft",
+    group = "Especies"
+    ) -> mapa_final
+
+# Añadir el control de capas después de haber creado el mapa
+
+mapa_final |>
+  addLayersControl(
+    baseGroups = c("Mapa general", "Imágenes satelitales", "Mapa blanco"),
+    overlayGroups = c("Temperatura", "Precipitación", "Modelo de distribución", "Registros de aves")
+    ) |>
+  hideGroup("Temperatura") |>
+  hideGroup("Precipitación")
+
+
+```
+
+```{r}
+#| label: mapa-binario4
+
+# Definir el umbral
+umbral <- 0.4
+
+# Crear el raster binario
+prediccion_binaria <- (prediccion4 >= umbral) * 1
+
+# Crear la paleta de colores para el raster binario
+colores_prediccion_binaria <- colorFactor(
+  palette = c("transparent", "blue"),  # "transparent" para las áreas no adecuadas
+  domain = c(0, 1),
+  na.color = "transparent"
+)
+
+# Mapa
+leaflet() |>
+  addTiles(group = "Mapa general") |>
+  addProviderTiles(
+    providers$Esri.WorldImagery, 
+    group = "Imágenes satelitales"
+  ) |>
+  addProviderTiles(
+    providers$CartoDB.Positron, 
+    group = "Mapa blanco"
+  ) |>
+  addRasterImage(
+    prediccion_binaria,
+    colors = colores_prediccion_binaria,
+    opacity = 0.6,
+    group = "Modelo de distribución binario",
+  ) |>
+  addCircleMarkers(
+    # capa de registros de presencia (puntos)
+    data = especies_seleccionadas,
+    stroke = F,
+    radius = 3,
+    fillColor = ~paleta_especies(SCIENTIFIC.NAME),  # Corregir el uso de la paleta
+    fillOpacity = 1,
+    popup = paste(
+      paste0("<strong>Nombre Científico: </strong>", especies_seleccionadas$SCIENTIFIC.NAME),
+      paste0("<strong>Cantidad de individuos: </strong>", especies_seleccionadas$OBSERVATION.COUNT),
+      paste0("<strong>Fecha de avistamiento: </strong>", especies_seleccionadas$OBSERVATION.DATE),
+      paste0("<a href='", especies_seleccionadas$GLOBAL.UNIQUE.IDENTIFIER, "'>Más información</a>"),
+      sep = '<br/>'
+    ),
+    group = "Registros de aves"
+  ) |>
+  addLegend(
+    title = "Modelo de distribución binario",
+    labels = c("Ausencia", "Presencia"),
+    colors = c("transparent", "blue"),
+    position = "bottomright",
+    group = "Modelo de distribución binario"
+  ) |>
+  addLegend(
+    title = "Especies",
+    values = especies_seleccionadas$SCIENTIFIC.NAME,  # Pasa la columna correcta
+    pal = paleta_especies,
+    position = "bottomleft",
+    group = "Especies"
+  ) -> mapa_final
+
+# Añadir el control de capas después de haber creado el mapa
+mapa_final |>
+  addLayersControl(
+    baseGroups = c("Mapa general", "Imágenes satelitales", "Mapa blanco"),
+    overlayGroups = c("Modelo de distribución binario", "Registros de aves")
+    )
+
+
+```
